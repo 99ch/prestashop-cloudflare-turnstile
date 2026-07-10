@@ -41,9 +41,9 @@ Move the downloaded file in the Prestashop **modules** directory and unzip the a
 - **Theme**: the Turnstile theme (auto, light or dark)
 - **Forms to validate**: the forms where a Turnstile validation is required
 
-For the registration form, the widget is automatically added with a hook. For "contact", "login" and "reset password" forms, **you need to manually add the widget in the template files**, usually before the validation button.
+The widget is automatically injected into the registration, login, contact and reset password forms — no template edit required. The auto-injection script locates the main form on the page and mounts the widget right before its submit button, which works with any PrestaShop 8+ theme that keeps the standard form structure.
 
-**Never select a form to validate without the widget in the form template.**
+If a custom or third-party theme prevents auto-detection, you can still add the widget manually via `{widget name='pixel_cloudflare_turnstile'}` (see below).
 
 ### Widget
 
@@ -63,7 +63,7 @@ Override the default action name by adding an action option:
 {widget name='pixel_cloudflare_turnstile' action='my-form'}
 ```
 
-### Forms
+### Forms (manual override, only when auto-injection is disabled or bypassed)
 
 | Form           | Template                                                                      |
 |----------------|-------------------------------------------------------------------------------|

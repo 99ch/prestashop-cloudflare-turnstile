@@ -717,7 +717,7 @@ class Pixel_cloudflare_turnstile extends Module implements WidgetInterface
                     'name' => 'name',
                 ],
                 'desc' => $this->trans(
-                    'For contact, login and reset password forms, you need to manually add the widget in the template files.',
+                    'The widget is automatically injected into the selected forms. Manual template editing is only required for exotic themes that break auto-detection.',
                     [],
                     'Modules.Pixelcloudflareturnstile.Admin'
                 ),
@@ -736,7 +736,7 @@ class Pixel_cloudflare_turnstile extends Module implements WidgetInterface
         $themeName = $this->getCurrentThemeName();
 
         $message = $this->trans(
-            'For contact, login and reset password forms, you need to manually add the widget in the template files.',
+            'The widget is automatically injected into the register, login, contact and reset password forms — no template edit required. If your theme prevents auto-detection, you can still add the widget manually with the tag below.',
             [],
             'Modules.Pixelcloudflareturnstile.Admin'
         );
