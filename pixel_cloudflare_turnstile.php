@@ -156,6 +156,63 @@ class Pixel_cloudflare_turnstile extends Module implements WidgetInterface
                 'attributes' => 'async',
             ]
         );
+
+        if (!$this->shouldAutoInjectOnCurrentPage()) {
+            return;
+        }
+
+        Media::addJsDef([
+            'pixelTurnstileConfig' => [
+                'sitekey'    => $this->getSitekey(),
+                'theme'      => $this->getTheme(),
+                'appearance' => $this->getAppearance(),
+                'action'     => $this->getFormName(),
+            ],
+        ]);
+
+        $this->context->controller->registerJavascript(
+            'cloudflare-turnstile-auto-inject',
+            'modules/' . $this->name . '/views/js/turnstile-auto-inject.js',
+            [
+                'position' => 'bottom',
+                'priority' => 200,
+            ]
+        );
+    }
+
+    /**
+     * Determine whether the current page needs the auto-injection script
+     * (login, contact and reset password forms — register uses the display hook).
+     *
+     * @return bool
+     */
+    protected function shouldAutoInjectOnCurrentPage(): bool
+    {
+        if (!$this->getSitekey() || !$this->getSecretKey()) {
+            return false;
+        }
+        if ($this->context->customer->isLogged()) {
+            return false;
+        }
+
+        $controllerClass = get_class($this->context->controller);
+
+        if ($controllerClass === 'AuthController'
+            && $this->isAvailable(self::FORM_LOGIN)
+            && !Tools::getValue('create_account')
+        ) {
+            return true;
+        }
+
+        if ($controllerClass === 'ContactController' && $this->isAvailable(self::FORM_CONTACT)) {
+            return true;
+        }
+
+        if ($controllerClass === 'PasswordController' && $this->isAvailable(self::FORM_PASSWORD)) {
+            return true;
+        }
+
+        return false;
     }
 
     /**
