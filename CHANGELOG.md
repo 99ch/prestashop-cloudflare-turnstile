@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.0
+
+- Auto-inject Turnstile widget into login, contact and reset password forms (no template edit required)
+- Verify `hostname` and (optional) `action` returned by siteverify + send `remoteip` for defence in depth
+- Redirect to the originating form page via `Link::getPageLink()` instead of a raw `HTTP_REFERER`
+- Scope configuration reads and writes to the current shop / group / global admin context
+
 ## 1.1.7
 
 - Fix module config redirect URL for Nginx compatibility
