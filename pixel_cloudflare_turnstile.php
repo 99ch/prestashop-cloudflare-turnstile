@@ -274,7 +274,7 @@ class Pixel_cloudflare_turnstile extends Module implements WidgetInterface
         }
 
         if ($this->canProcess(get_class($params['controller']), true)) {
-            $this->turnstileValidationAndRedirect();
+            $this->turnstileValidationAndRedirect($this->getFormName());
         }
     }
 
@@ -303,7 +303,7 @@ class Pixel_cloudflare_turnstile extends Module implements WidgetInterface
     public function hookActionNewsletterRegistrationBefore($params)
     {
         if ($this->isAvailable(self::FORM_NEWSLETTER)) {
-            if (!self::turnstileValidation()) {
+            if (!self::turnstileValidation(self::FORM_NEWSLETTER)) {
                   if (!empty(static::$validationError)) {
                     $params['hookError'] = static::$validationError;
                 } else {
@@ -400,14 +400,16 @@ class Pixel_cloudflare_turnstile extends Module implements WidgetInterface
     }
 
     /**
-     * Validate turnstile
+     * Validate turnstile and redirect to the previous page on failure.
+     *
+     * @param string|null $expectedAction Action name enforced against the siteverify response.
      *
      * @return void
      * @throws Exception
      */
-    public static function turnstileValidationAndRedirect(): void
+    public static function turnstileValidationAndRedirect(?string $expectedAction = null): void
     {
-        if (!self::turnstileValidation()) {
+        if (!self::turnstileValidation($expectedAction)) {
             $referer = $_SERVER['HTTP_REFERER'] ?? 'index';
 
             if (!empty(static::$validationError)) {
@@ -423,12 +425,17 @@ class Pixel_cloudflare_turnstile extends Module implements WidgetInterface
     }
 
     /**
-     * Validate turnstile
+     * Validate turnstile against Cloudflare siteverify with defence-in-depth
+     * checks on `hostname` and optionally on `action`.
+     *
+     * @param string|null $expectedAction When provided, the response `action`
+     *                                    must match (truncated to 32 chars,
+     *                                    like the widget-side value).
      *
      * @return bool
      * @throws Exception
      */
-    public static function turnstileValidation(): bool
+    public static function turnstileValidation(?string $expectedAction = null): bool
     {
         $response = Tools::getValue('cf-turnstile-response');
         if (!$response) {
@@ -447,6 +454,10 @@ class Pixel_cloudflare_turnstile extends Module implements WidgetInterface
             'secret'   => self::getSecretKeyStatic(),
             'response' => $response,
         ];
+        $remoteIp = Tools::getRemoteAddr();
+        if (is_string($remoteIp) && $remoteIp !== '' && filter_var($remoteIp, FILTER_VALIDATE_IP)) {
+            $data['remoteip'] = $remoteIp;
+        }
 
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, 'https://challenges.cloudflare.com/turnstile/v0/siteverify');
@@ -481,7 +492,53 @@ class Pixel_cloudflare_turnstile extends Module implements WidgetInterface
             return false;
         }
 
+        $expectedHost = self::currentHostname();
+        $returnedHost = strtolower((string) ($result['hostname'] ?? ''));
+        if ($expectedHost !== '' && $returnedHost !== $expectedHost) {
+            static::$validationError =
+                Context::getContext()->getTranslator()->trans(
+                    'Security validation error:',
+                    [],
+                    'Modules.Pixelcloudflareturnstile.Shop'
+                ) . ' ' . self::getErrorMessage('hostname-mismatch');
+
+            return false;
+        }
+
+        if ($expectedAction !== null) {
+            $normalizedExpected = substr($expectedAction, 0, 32);
+            $returnedAction = (string) ($result['action'] ?? '');
+            if ($returnedAction !== $normalizedExpected) {
+                static::$validationError =
+                    Context::getContext()->getTranslator()->trans(
+                        'Security validation error:',
+                        [],
+                        'Modules.Pixelcloudflareturnstile.Shop'
+                    ) . ' ' . self::getErrorMessage('action-mismatch');
+
+                return false;
+            }
+        }
+
         return true;
+    }
+
+    /**
+     * Retrieve the current request hostname (without port), used to
+     * defend against cross-site token replay by comparing it against
+     * the `hostname` returned by Cloudflare siteverify.
+     *
+     * @return string
+     */
+    protected static function currentHostname(): string
+    {
+        $host = $_SERVER['HTTP_HOST'] ?? '';
+        if ($host !== '') {
+            $host = explode(':', $host)[0];
+            return strtolower($host);
+        }
+
+        return strtolower((string) Tools::getShopDomain());
     }
 
     /**
@@ -502,6 +559,8 @@ class Pixel_cloudflare_turnstile extends Module implements WidgetInterface
             'timeout-or-duplicate'   => 'the response parameter has already been validated before.',
             'internal-error'         => 'an internal error happened while validating the response. The request can be retried.',
             'unavailable'            => 'unable to contact Cloudflare to validate the form',
+            'hostname-mismatch'      => 'the response was validated for a different hostname.',
+            'action-mismatch'        => 'the response was validated for a different action.',
         ];
 
         return $messages[$code] ?? 'unknown error';
