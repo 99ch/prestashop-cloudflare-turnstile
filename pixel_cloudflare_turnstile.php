@@ -400,7 +400,7 @@ class Pixel_cloudflare_turnstile extends Module implements WidgetInterface
     }
 
     /**
-     * Validate turnstile and redirect to the previous page on failure.
+     * Validate turnstile and redirect to the originating form page on failure.
      *
      * @param string|null $expectedAction Action name enforced against the siteverify response.
      *
@@ -409,19 +409,71 @@ class Pixel_cloudflare_turnstile extends Module implements WidgetInterface
      */
     public static function turnstileValidationAndRedirect(?string $expectedAction = null): void
     {
-        if (!self::turnstileValidation($expectedAction)) {
-            $referer = $_SERVER['HTTP_REFERER'] ?? 'index';
-
-            if (!empty(static::$validationError)) {
-                $cookie  = Context::getContext()->cookie;
-                $cookie->__set(
-                    self::TURNSTILE_SESSION_ERROR_KEY,
-                    static::$validationError
-                );
-            }
-
-            Tools::redirect($referer);
+        if (self::turnstileValidation($expectedAction)) {
+            return;
         }
+
+        if (!empty(static::$validationError)) {
+            $cookie = Context::getContext()->cookie;
+            $cookie->__set(
+                self::TURNSTILE_SESSION_ERROR_KEY,
+                static::$validationError
+            );
+        }
+
+        Tools::redirect(self::resolveRedirectTarget($expectedAction));
+    }
+
+    /**
+     * Resolve the redirect target based on the current form context rather
+     * than trusting a possibly missing or spoofable HTTP_REFERER.
+     *
+     * @param string|null $expectedAction
+     *
+     * @return string
+     */
+    protected static function resolveRedirectTarget(?string $expectedAction): string
+    {
+        $link = Context::getContext()->link;
+
+        switch ($expectedAction) {
+            case self::FORM_LOGIN:
+                return $link->getPageLink('authentication', true);
+            case self::FORM_REGISTER:
+            case 'registration':
+                $url = $link->getPageLink('authentication', true);
+                $separator = strpos($url, '?') === false ? '?' : '&';
+                return $url . $separator . 'create_account=1';
+            case self::FORM_CONTACT:
+                return $link->getPageLink('contact', true);
+            case self::FORM_PASSWORD:
+                return $link->getPageLink('password', true);
+        }
+
+        $referer = $_SERVER['HTTP_REFERER'] ?? '';
+        if ($referer !== '' && self::isSameHostReferer($referer)) {
+            return $referer;
+        }
+
+        return $link->getPageLink('index', true);
+    }
+
+    /**
+     * Ensure a raw HTTP_REFERER points to the current host before using it
+     * as a redirect target (defence against open-redirect abuse).
+     *
+     * @param string $referer
+     *
+     * @return bool
+     */
+    protected static function isSameHostReferer(string $referer): bool
+    {
+        $host = parse_url($referer, PHP_URL_HOST);
+        if (!is_string($host) || $host === '') {
+            return false;
+        }
+
+        return strcasecmp($host, self::currentHostname()) === 0;
     }
 
     /**
