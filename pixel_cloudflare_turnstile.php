@@ -859,6 +859,7 @@ class Pixel_cloudflare_turnstile extends Module implements WidgetInterface
         $output = '<div class="alert alert-info">' . $message . '</div>';
 
         if (Tools::isSubmit('submit' . $this->name)) {
+            [$idShopGroup, $idShop] = self::currentAdminShopContext();
             foreach ($this->getConfigFields() as $code => $field) {
                 $value = Tools::getValue($code);
                 if ($field['required'] && empty($value)) {
@@ -873,7 +874,7 @@ class Pixel_cloudflare_turnstile extends Module implements WidgetInterface
                 if ($value && ($field['multiple'] ?? false) === true) {
                     $value = join(',', $value);
                 }
-                Configuration::updateValue($code, $value);
+                Configuration::updateValue($code, $value, false, $idShopGroup, $idShop);
             }
 
             $output .= $this->displayConfirmation(
@@ -925,8 +926,9 @@ class Pixel_cloudflare_turnstile extends Module implements WidgetInterface
 
         $helper->default_form_language = (int) Configuration::get('PS_LANG_DEFAULT');
 
+        [$idShopGroup, $idShop] = self::currentAdminShopContext();
         foreach ($this->getConfigFields() as $code => $field) {
-            $value = Tools::getValue($code, Configuration::get($code));
+            $value = Tools::getValue($code, Configuration::get($code, null, $idShopGroup, $idShop));
             if (!is_array($value) && ($field['multiple'] ?? false) === true) {
                 $value = explode(',', $value);
             }
@@ -934,6 +936,27 @@ class Pixel_cloudflare_turnstile extends Module implements WidgetInterface
         }
 
         return $helper->generateForm([$form]);
+    }
+
+    /**
+     * Resolve the current admin shop context so configuration reads and
+     * writes stay scoped to the correct shop / group / global level.
+     *
+     * @return array{0: ?int, 1: ?int} [$idShopGroup, $idShop]
+     */
+    protected static function currentAdminShopContext(): array
+    {
+        $idShopGroup = null;
+        $idShop = null;
+        $context = Shop::getContext();
+
+        if ($context === Shop::CONTEXT_SHOP) {
+            $idShop = (int) Shop::getContextShopID();
+        } elseif ($context === Shop::CONTEXT_GROUP) {
+            $idShopGroup = (int) Shop::getContextShopGroupID();
+        }
+
+        return [$idShopGroup, $idShop];
     }
 
     /**
